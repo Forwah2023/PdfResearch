@@ -1,20 +1,67 @@
 import os
 import re
 import sys
-import time
 import operator  # for sorting results
+from collections import Counter  # for bar chart plot
 
 from PyQt5 import QtWidgets as qtw
 from PyQt5 import QtGui as qtg
 from PyQt5 import QtCore as qtc
+from PyQt5 import QtChart as qtch
 
 import fitz  # from installed PyMuPDF package
 
 Found_total = []
 # previous file paths and texts in current folder
 search_history = []
-WIDTH = 800
-HEIGHT = 800
+#styling elements
+WIDTH = 1600
+HEIGHT = 850
+
+styl = """
+QMainWindow{
+ background-color:#abbed4;  
+}
+QLineEdit{
+font-size: 10pt;
+margin:30px;
+border-radius: 10px;
+}
+QLabel{
+font-size: 10pt;
+}
+QListwidget{
+background-color: #f5f5f5;
+border: 1px solid #dcdcdc;
+border-radius: 10px;
+}
+QListWidget::item {
+background-color: #ffffff;
+padding: 5px;
+margin-bottom: 5px;
+}
+QListWidget::item:selected {
+background-color: #0078d7;
+color: #ffffff;
+}
+QPushButton {
+background-color: #0078d7;
+border: none;
+color: white;
+padding: 10px 20px;
+text-align: center;
+text-decoration: none;
+font-size: 16px;
+margin: 4px 2px;
+border-radius: 50%;
+}
+QPushButton:hover {
+background-color: #005cbf;
+}
+QPushButton:pressed {
+background-color: #004eaa;
+}
+"""
 
 
 class MainWidget(qtw.QWidget):
@@ -33,30 +80,31 @@ class MainWidget(qtw.QWidget):
         search_layout.addWidget(self.input_text)
         search_layout.addWidget(self.search_btn)
         layout.addLayout(search_layout)
-        # radio button area
-        radio_layout = qtw.QHBoxLayout()
-        self.pdf_radio = qtw.QRadioButton("pdf", self)
-        self.word_radio = qtw.QRadioButton("Word", self)
-        self.both_radio = qtw.QRadioButton("Both", self)
-        radio_layout.addWidget(self.pdf_radio)
-        radio_layout.addWidget(self.word_radio)
-        radio_layout.addWidget(self.both_radio)
-        layout.addLayout(radio_layout)
         # List label
         label_layout = qtw.QHBoxLayout()
-        Files = qtw.QLabel("File(s)", self)
+        Files = qtw.QLabel("All files", self)
+        heading_font = qtg.QFont('SansSerif', 12,qtg.QFont.Bold)
+        heading_font.setStretch(qtg.QFont.ExtraExpanded)
+        Files.setFont(heading_font)
         Files.setAlignment(qtc.Qt.AlignCenter)
-        Found = qtw.QLabel("Found", self)
+        Found = qtw.QLabel("Files found", self)
         Found.setAlignment(qtc.Qt.AlignCenter)
+        Found.setFont(heading_font)
+        Distribution=qtw.QLabel("Results Distribution", self)
+        Distribution.setAlignment(qtc.Qt.AlignCenter)
+        Distribution.setFont(heading_font)
         label_layout.addWidget(Files)
         label_layout.addWidget(Found)
+        label_layout.addWidget(Distribution)
         layout.addLayout(label_layout)
         # List area
         list_layout = qtw.QHBoxLayout()
         self.left_list = qtw.QListWidget(self)
         self.right_list = qtw.QListWidget(self)
+        self.rv = ResultsView()  # new
         list_layout.addWidget(self.left_list)
         list_layout.addWidget(self.right_list)
+        list_layout.addWidget(self.rv)
         layout.addLayout(list_layout)
         # ProgressBar area
         prog_layout = qtw.QHBoxLayout()
@@ -67,38 +115,50 @@ class MainWidget(qtw.QWidget):
         prog_layout.addWidget(self.label_prog)
         prog_layout.addWidget(self.prog)
         layout.addLayout(prog_layout)
-        # signals and slots
-        self.search_btn.clicked.connect(
-            lambda: self.search_pdf_text(self.input_text.text())
+        # text search thread
+        self.ts = TextSearch()
+        self.text_search_thread = qtc.QThread()
+        self.ts.moveToThread(self.text_search_thread)
+        self.ts.finished.connect(self.text_search_thread.quit)
+        self.text_search_thread.start()
+        # signals and slots for text_search thread
+        self.search_btn.clicked.connect(self.text_search_thread.start)
+        self.search_btn.clicked.connect(self.set_search_params)
+        self.ts.searchStarted.connect(self.ts.search_pdf_text)
+        self.ts.searchStarted.connect(lambda: self.label_prog.setText("Searching... "))
+        self.ts.indexChanged.connect(lambda i: self.ts.compute_percentage(i))
+        self.ts.PercentageChanged.connect(lambda i: self.prog.setValue(i))
+        self.ts.resultsAvailable.connect(
+            lambda x: self.right_list.addItems([item[0] for item in x])
         )
+
         # create thread object
         self.te = TextEtract()
         self.text_extract_thread = qtc.QThread()
         self.te.moveToThread(self.text_extract_thread)
         self.te.finished.connect(self.text_extract_thread.quit)
         self.text_extract_thread.start()
-        # signals and slots
+
+        # signals and slots for pdf search thread
         self.te.fileChanged.connect(lambda f, g: self.left_list.addItem(f))
         self.te.FolderSelected.connect(self.text_extract_thread.start)
         self.te.FolderSelected.connect(self.te.search_files)
         self.te.FolderSelected.connect(lambda: self.label_prog.setText("Scanning... "))
-        self.te.finished.connect(lambda: self.label_prog.setText("Done!"))
         self.te.fileChanged.connect(self.te.compute_percentage)
         self.te.PercentageChanged.connect(lambda i: self.prog.setValue(i))
+
         self.show()
 
-    def search_pdf_text(self, pattern):
-        self.clear_prev_search()
+    def set_search_params(self):
+        pattern = self.input_text.text()
         if pattern != "":
-            for searched in search_history:
-                match = re.findall(pattern, searched[2], flags=re.IGNORECASE)
-                if match:
-                    Found_total.append((searched[0], searched[1], len(match), match))
-            # sort in descending order of  len(match)
-            sorted_results = sorted(
-                Found_total, key=operator.itemgetter(2), reverse=True
-            )
-            self.right_list.addItems([item[0] for item in sorted_results])
+            # clear prev search, sets search parameters for ts object, and starts search
+            self.clear_prev_search()
+            self.ts.pattern = pattern
+            self.ts.search_history = search_history
+            self.ts.searchStarted.emit()
+        else:
+            self.ts.emptyField.emit()
 
     def clear_prev_search(self, newFold=False):
         global Found_total
@@ -111,7 +171,47 @@ class MainWidget(qtw.QWidget):
             self.te.file_done = 0
             self.prog.setValue(0)
             self.te.file_roster = []
-            search_history = []
+            # search_history = []
+
+
+class TextSearch(qtc.QObject):
+    finished = qtc.pyqtSignal()
+    PercentageChanged = qtc.pyqtSignal(int)
+    searchStarted = qtc.pyqtSignal()
+    resultsAvailable = qtc.pyqtSignal(list)
+    indexChanged = qtc.pyqtSignal(int)
+    emptyField = qtc.pyqtSignal()
+    pattern = ""
+    search_history = []
+    found_count = 0
+    sorted_results = []
+
+    def __init__(self):
+        super().__init__()
+
+    qtc.pyqtSlot()
+
+    def search_pdf_text(self):
+        index = 1  # starting index of search in search history
+        for searched in self.search_history:
+            match = re.findall(self.pattern, searched[2], flags=re.IGNORECASE)
+            if match:
+                Found_total.append((searched[0], searched[1], len(match), match))
+            self.indexChanged.emit(index)
+            index += 1
+        # sort in descending order of  len(match)
+        self.sorted_results = sorted(
+            Found_total, key=operator.itemgetter(2), reverse=True
+        )
+        self.found_count = len(self.sorted_results)
+        self.resultsAvailable.emit(self.sorted_results)
+        self.finished.emit()
+
+    qtc.pyqtSlot(int)
+
+    def compute_percentage(self, index):
+        int_perc = round((index / len(self.search_history)) * 100)
+        self.PercentageChanged.emit(int_perc)
 
 
 class TextEtract(qtc.QObject):
@@ -163,7 +263,7 @@ class TextEtract(qtc.QObject):
                 return True
         return False
 
-    qtc.pyqtSlot(str)
+    qtc.pyqtSlot(str, str)
 
     def compute_percentage(self):
         int_perc = round((self.file_done / self.file_count) * 100)
@@ -175,6 +275,7 @@ class MainWindow(qtw.QMainWindow):
         super().__init__()
         self.setCentralWidget(mainwidget)
         self.resize(qtc.QSize(WIDTH, HEIGHT))
+        self.setStyleSheet(styl)
         # self.setWindowIcon(qtg.QIcon('Icons/'))
         self.setWindowTitle("PdfRe-search")
         # menu bar
@@ -190,14 +291,28 @@ class MainWindow(qtw.QMainWindow):
                 os.path.normpath(os.path.join(g, f))
             )
         )
+        # display message when scan finished
         mainwidget.te.finished.connect(
-            lambda: self.statusBar().showMessage(
-                "Scanned {} of {} files".format(
-                    mainwidget.te.file_count - mainwidget.te.error_count,
-                    mainwidget.te.file_count,
-                )
+            lambda: self.update_status(
+                "Scanned",
+                mainwidget.te.file_count - mainwidget.te.error_count,
+                mainwidget.te.file_count,
+                "Done!",
             )
         )
+        # dispay message when search finished
+        mainwidget.ts.finished.connect(
+            lambda: self.update_status(
+                "Found", mainwidget.ts.found_count, mainwidget.te.file_count, "Done!"
+            )
+        )
+
+        mainwidget.ts.emptyField.connect(
+            lambda: self.statusBar().showMessage("Empty search field!")
+        )
+        # signal to plot
+        mainwidget.ts.resultsAvailable.connect(mainwidget.rv.set_results)
+        mainwidget.right_list.currentRowChanged.connect(mainwidget.rv.plot_data)
         self.show()
 
     def get_folder(self):
@@ -213,19 +328,52 @@ class MainWindow(qtw.QMainWindow):
 
     def get_roster(self, Fpath, mainwidget):
         # gets list of file names
-        # mainwidget = self.centralWidget()
         for folderName, subfolders, filenames in os.walk(Fpath):
             for filename in filenames:
                 if filename.endswith(".pdf"):
                     mainwidget.te.file_roster.append((filename, folderName))
                     mainwidget.te.file_count += 1
 
+    def update_status(self, messge1, message2, message3, message4):
+        self.statusBar().showMessage(
+            "{} {} of {} files".format(messge1, message2, message3)
+        )
+        # Done, Scanning... or searching...
+        self.centralWidget().label_prog.setText(message4)
 
-# start = time.time()
-# search_files(Fpath)
-# end = time.time()
-# print(end - start)
 
+class ResultsView(qtch.QChartView):
+
+    def __init__(self):
+        super().__init__()
+        self.chart = qtch.QChart()
+        self.setChart(self.chart)
+        self.series = qtch.QBarSeries()
+        self.chart.addSeries(self.series)
+        self.bar_set = qtch.QBarSet("Search results distribution")
+        self.series.append(self.bar_set)
+        #self.series.setLabelsVisible(True)
+        self.show()
+    def set_results(self,data):
+        self.results=data
+
+    def plot_data(self,row):
+        #values to be plotted
+        data=Counter(self.results[row][3]) # 3 is a reference to key words used in search
+        data_counts=self.results[row][2]# 2 is reference to count from findall results
+        self.bar_set.append(data.values())
+        # axes
+        x_axis = qtch.QBarCategoryAxis()
+        x_axis.append(data.keys())
+        self.chart.setAxisX(x_axis)
+        self.series.attachAxis(x_axis)
+
+        y_axis = qtch.QValueAxis()
+        y_axis.setRange(0, max(data.values()))
+        self.chart.setAxisY(y_axis)
+        self.series.attachAxis(y_axis)
+        #title
+        self.chart.setTitle(self.results[row][0])# 0 is a reference for filename 
 
 # for result in sorted_results:
 # print(result[0],"\t",result[1],"\n")
@@ -238,3 +386,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+### discarded radio section
+ #       # radio button area
+  #      radio_layout = qtw.QHBoxLayout()
+   #     self.pdf_radio = qtw.QRadioButton("pdf", self)
+    #    self.word_radio = qtw.QRadioButton("Word", self)
+     #   self.both_radio = qtw.QRadioButton("Both", self)
+      #  radio_layout.addWidget(self.pdf_radio)
+       # radio_layout.addWidget(self.word_radio)
+        #radio_layout.addWidget(self.both_radio)
+        #layout.addLayout(radio_layout)
