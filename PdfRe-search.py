@@ -10,15 +10,16 @@ from PyQt5 import QtCore as qtc
 from PyQt5 import QtChart as qtch
 
 import fitz  # from installed PyMuPDF package
+import docx2txt  # to extract text from docx files
 
 Found_total = []
 # previous file paths and texts in current folder
 search_history = []
-#styling elements
+# styling elements
 WIDTH = 1600
 HEIGHT = 850
 # settings
-settings = qtc.QSettings('LMS', 'PdfRe-search')
+settings = qtc.QSettings("LMS", "PdfRe-search")
 
 styl = """
 QMainWindow{
@@ -85,14 +86,14 @@ class MainWidget(qtw.QWidget):
         # List label
         label_layout = qtw.QHBoxLayout()
         Files = qtw.QLabel("All Files", self)
-        heading_font = qtg.QFont('SansSerif', 12,qtg.QFont.Bold)
+        heading_font = qtg.QFont("SansSerif", 12, qtg.QFont.Bold)
         heading_font.setStretch(qtg.QFont.ExtraExpanded)
         Files.setFont(heading_font)
         Files.setAlignment(qtc.Qt.AlignCenter)
         Found = qtw.QLabel("Files Found", self)
         Found.setAlignment(qtc.Qt.AlignCenter)
         Found.setFont(heading_font)
-        Distribution=qtw.QLabel("Results Distribution", self)
+        Distribution = qtw.QLabel("Results Distribution", self)
         Distribution.setAlignment(qtc.Qt.AlignCenter)
         Distribution.setFont(heading_font)
         label_layout.addWidget(Files)
@@ -124,6 +125,7 @@ class MainWidget(qtw.QWidget):
         self.ts.finished.connect(self.text_search_thread.quit)
         self.text_search_thread.start()
         # signals and slots for text_search thread
+        self.input_text.returnPressed.connect(self.search_btn.click)
         self.search_btn.clicked.connect(self.text_search_thread.start)
         self.search_btn.clicked.connect(self.set_search_params)
         self.ts.searchStarted.connect(self.ts.search_pdf_text)
@@ -250,6 +252,11 @@ class TextEtract(qtc.QObject):
                 if filename.endswith(".pdf"):
                     with fitz.open(curr_file) as f:
                         P_text = "".join([p.get_text() for p in f])
+                if filename.endswith(".docx"):
+                    P_text = docx2txt.process(curr_file)
+                if filename.endswith(".txt"):
+                    with open(curr_file, "r", encoding="utf-8", errors="ignore") as f:
+                        P_text = f.read()
                 search_history.append((filename, folderName, P_text))
                 self.file_done += 1
                 self.fileChanged.emit(filename, folderName)
@@ -277,7 +284,6 @@ class TextEtract(qtc.QObject):
 
 
 class ResultsView(qtch.QChartView):
-
     def __init__(self):
         super().__init__()
         self.chart = qtch.QChart()
@@ -286,15 +292,20 @@ class ResultsView(qtch.QChartView):
         self.chart.addSeries(self.series)
         self.bar_set = qtch.QBarSet("Search results distribution")
         self.series.append(self.bar_set)
-        #self.series.setLabelsVisible(True)
+        # self.series.setLabelsVisible(True)
         self.show()
-    def set_results(self,data):
-        self.results=data
 
-    def plot_data(self,row):
-        #values to be plotted
-        data=Counter(self.results[row][3]) # 3 is a reference to key words used in search
-        data_counts=self.results[row][2]# 2 is reference to count from findall results
+    def set_results(self, data):
+        self.results = data
+
+    def plot_data(self, row):
+        # values to be plotted
+        data = Counter(
+            self.results[row][3]
+        )  # 3 is a reference to key words used in search
+        data_counts = self.results[row][
+            2
+        ]  # 2 is reference to count from findall results
         self.bar_set.append(data.values())
         # axes
         x_axis = qtch.QBarCategoryAxis()
@@ -306,55 +317,63 @@ class ResultsView(qtch.QChartView):
         y_axis.setRange(0, max(data.values()))
         self.chart.setAxisY(y_axis)
         self.series.attachAxis(y_axis)
-        #title
-        self.chart.setTitle(self.results[row][0])# 0 is a reference for filename 
+        # title
+        self.chart.setTitle(self.results[row][0])  # 0 is a reference for filename
+
 
 class SettingsWidget(qtw.QWidget):
     def __init__(self):
         super().__init__()
-        self.resize(qtc.QSize(400,300))
+        self.resize(qtc.QSize(400, 300))
         self.setStyleSheet(styl)
-        self.setWindowIcon(qtg.QIcon('Icons/logo.png'))
+        self.setWindowIcon(qtg.QIcon("Icons/logo.png"))
         self.setWindowTitle("Settings")
-        layout=qtw.QVBoxLayout()
+        layout = qtw.QVBoxLayout()
         self.setLayout(layout)
         tab_widget = qtw.QTabWidget()
         layout.addWidget(tab_widget)
         # file input tab
-        container_types=qtw.QWidget(self)
-        tab_widget.addTab(container_types, 'File Type')
-        sub_layout1=qtw.QVBoxLayout()
+        container_types = qtw.QWidget(self)
+        tab_widget.addTab(container_types, "File Types")
+        sub_layout1 = qtw.QVBoxLayout()
         container_types.setLayout(sub_layout1)
-        self.pdf_type=qtw.QCheckBox("pdf",self,checked=settings.value("ALLOWPDF", True, type=bool))
-        self.doc_type=qtw.QCheckBox("docx",self,checked=settings.value("ALLOWDOC", False, type=bool))
-        self.txt_type=qtw.QCheckBox("txt",self,checked=settings.value("ALLOWTXT", False, type=bool))
+        self.pdf_type = qtw.QCheckBox(
+            "pdf", self, checked=settings.value("ALLOWPDF", True, type=bool)
+        )
+        self.doc_type = qtw.QCheckBox(
+            "docx", self, checked=settings.value("ALLOWDOC", True, type=bool)
+        )
+        self.txt_type = qtw.QCheckBox(
+            "txt", self, checked=settings.value("ALLOWTXT", False, type=bool)
+        )
         sub_layout1.addWidget(self.pdf_type)
         sub_layout1.addWidget(self.doc_type)
         sub_layout1.addWidget(self.txt_type)
         ###Search parameters tab
-        container_search=qtw.QWidget(self)
-        sub_layout2=qtw.QVBoxLayout()
+        container_search = qtw.QWidget(self)
+        sub_layout2 = qtw.QVBoxLayout()
         container_search.setLayout(sub_layout2)
-        tab_widget.addTab(container_search, 'Search parameters')
-        self.case_type=qtw.QCheckBox("Ingnore case",self,checked=settings.value("IGNORECASE", True, type=bool))
+        tab_widget.addTab(container_search, "Search parameters")
+        self.case_type = qtw.QCheckBox(
+            "Ingnore case", self, checked=settings.value("IGNORECASE", True, type=bool)
+        )
         sub_layout2.addWidget(self.case_type)
-        #apply settings button
-        apply_button=qtw.QPushButton("Apply settings",self)#(Requires restart!)
-        apply_button.setFixedSize(150,50)
-        layoutH_bottom=qtw.QHBoxLayout()
+        # apply settings button
+        apply_button = qtw.QPushButton("Apply settings", self)  # (Requires restart!)
+        apply_button.setFixedSize(150, 50)
+        layoutH_bottom = qtw.QHBoxLayout()
         layoutH_bottom.addWidget(apply_button)
         layout.addLayout(layoutH_bottom)
-        layout.addWidget(qtw.QLabel("(Requires restart to be effective!)",self))
-        #signals and slots
+        layout.addWidget(qtw.QLabel("(Requires restart to be effective!)", self))
+        # signals and slots
         apply_button.clicked.connect(self.validate_settings)
 
     def validate_settings(self):
-        settings.setValue("ALLOWPDF",self.pdf_type.isChecked())
-        settings.setValue("ALLOWDOC",self.doc_type.isChecked())
-        settings.setValue("ALLOWTXT",self.txt_type.isChecked())
-        settings.setValue("IGNORECASE",self.case_type.isChecked())
+        settings.setValue("ALLOWPDF", self.pdf_type.isChecked())
+        settings.setValue("ALLOWDOC", self.doc_type.isChecked())
+        settings.setValue("ALLOWTXT", self.txt_type.isChecked())
+        settings.setValue("IGNORECASE", self.case_type.isChecked())
         self.close()
-
 
 
 class MainWindow(qtw.QMainWindow):
@@ -363,28 +382,28 @@ class MainWindow(qtw.QMainWindow):
         self.setCentralWidget(mainwidget)
         self.resize(qtc.QSize(WIDTH, HEIGHT))
         self.setStyleSheet(styl)
-        self.setWindowIcon(qtg.QIcon('Icons/logo.png'))
+        self.setWindowIcon(qtg.QIcon("Icons/logo.png"))
         self.setWindowTitle("PdfRe-search")
-        #menu bar
+        # menu bar
         menubar = self.menuBar()
         Folder_menu = menubar.addMenu("Folder")
         Folder_menu.addAction("Open Folder", self.get_folder)
-        self.sett=SettingsWidget()
+        self.sett = SettingsWidget()
         settings_menu = menubar.addMenu("Settings")
-        settings_menu.addAction("Show settings",self.sett.show)
+        settings_menu.addAction("Show settings", self.sett.show)
         help_menu = menubar.addMenu("Help")
-        about_action=help_menu.addAction('About')
-        #add file types
-        file_types_list=[]
-        if settings.value("ALLOWPDF",True, type=bool):
+        about_action = help_menu.addAction("About")
+        # add file types
+        file_types_list = []
+        if settings.value("ALLOWPDF", True, type=bool):
             file_types_list.append(".pdf")
-        if settings.value("ALLOWDOC",False, type=bool):
+        if settings.value("ALLOWDOC", False, type=bool):
             file_types_list.append(".docx")
-        if settings.value("ALLOWTXT",False, type=bool):
+        if settings.value("ALLOWTXT", False, type=bool):
             file_types_list.append(".txt")
-        self.File_types=tuple(file_types_list)
+        self.File_types = tuple(file_types_list)
         # signals and slots
-        #os.normpath to covert all slahses to \
+        # os.normpath to covert all slahses to \
         mainwidget.te.fileChanged.connect(
             lambda f, g: self.statusBar().showMessage(
                 os.path.normpath(os.path.join(g, f))
@@ -443,6 +462,7 @@ class MainWindow(qtw.QMainWindow):
 
 ####
 
+
 def main():
     app = qtw.QApplication(sys.argv)
     Central_w = MainWidget()
@@ -453,12 +473,12 @@ def main():
 if __name__ == "__main__":
     main()
 ### discarded radio section
- #       # radio button area
-  #      radio_layout = qtw.QHBoxLayout()
-   #     self.pdf_radio = qtw.QRadioButton("pdf", self)
-    #    self.word_radio = qtw.QRadioButton("Word", self)
-     #   self.both_radio = qtw.QRadioButton("Both", self)
-      #  radio_layout.addWidget(self.pdf_radio)
-       # radio_layout.addWidget(self.word_radio)
-        #radio_layout.addWidget(self.both_radio)
-        #layout.addLayout(radio_layout)
+#       # radio button area
+#      radio_layout = qtw.QHBoxLayout()
+#     self.pdf_radio = qtw.QRadioButton("pdf", self)
+#    self.word_radio = qtw.QRadioButton("Word", self)
+#   self.both_radio = qtw.QRadioButton("Both", self)
+#  radio_layout.addWidget(self.pdf_radio)
+# radio_layout.addWidget(self.word_radio)
+# radio_layout.addWidget(self.both_radio)
+# layout.addLayout(radio_layout)
