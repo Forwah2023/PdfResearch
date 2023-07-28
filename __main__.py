@@ -9,6 +9,7 @@ from PyQt5 import QtGui as qtg
 from PyQt5 import QtCore as qtc
 from PyQt5 import QtChart as qtch
 
+from .Icons import resources
 import fitz  # from installed PyMuPDF package
 import docx2txt  # to extract text from docx files
 
@@ -326,7 +327,7 @@ class SettingsWidget(qtw.QWidget):
         super().__init__()
         self.resize(qtc.QSize(400, 300))
         self.setStyleSheet(styl)
-        self.setWindowIcon(qtg.QIcon("Icons/logo.png"))
+        self.setWindowIcon(qtg.QIcon(":/icons/mainIcon.png"))
         self.setWindowTitle("Settings")
         layout = qtw.QVBoxLayout()
         self.setLayout(layout)
@@ -382,8 +383,8 @@ class MainWindow(qtw.QMainWindow):
         self.setCentralWidget(mainwidget)
         self.resize(qtc.QSize(WIDTH, HEIGHT))
         self.setStyleSheet(styl)
-        self.setWindowIcon(qtg.QIcon("Icons/logo.png"))
-        self.setWindowTitle("PdfRe-search")
+        self.setWindowIcon(qtg.QIcon(":/icons/mainIcon.png")) #
+        self.setWindowTitle("PdfResearch")
         # menu bar
         menubar = self.menuBar()
         Folder_menu = menubar.addMenu("Folder")
@@ -392,7 +393,7 @@ class MainWindow(qtw.QMainWindow):
         settings_menu = menubar.addMenu("Settings")
         settings_menu.addAction("Show settings", self.sett.show)
         help_menu = menubar.addMenu("Help")
-        about_action = help_menu.addAction("About")
+        about_action = help_menu.addAction("About", self.show_about)
         # add file types
         file_types_list = []
         if settings.value("ALLOWPDF", True, type=bool):
@@ -459,6 +460,13 @@ class MainWindow(qtw.QMainWindow):
         # Done, Scanning... or searching...
         self.centralWidget().label_prog.setText(message4)
 
+    def show_about(self):
+        qtw.QMessageBox.about(
+            self,
+            "PdfResearch",
+            "** A program designed to search a folder of files for specific keywords.\n ** Currently supports: pdf, .docx, and .txt files.\n ** built on Python's Re module.\n ** Copyright (C) 2023 Forwah Amstrong, Ph.D \n<lmsoftware2023@gmail.com> \n ** GNU General Public Licence.",
+        )
+
 
 ####
 
@@ -472,13 +480,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-### discarded radio section
-#       # radio button area
-#      radio_layout = qtw.QHBoxLayout()
-#     self.pdf_radio = qtw.QRadioButton("pdf", self)
-#    self.word_radio = qtw.QRadioButton("Word", self)
-#   self.both_radio = qtw.QRadioButton("Both", self)
-#  radio_layout.addWidget(self.pdf_radio)
-# radio_layout.addWidget(self.word_radio)
-# radio_layout.addWidget(self.both_radio)
-# layout.addLayout(radio_layout)
