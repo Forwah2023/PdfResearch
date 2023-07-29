@@ -1,15 +1,16 @@
-# Classroom-Insights
-A program designed to search a folder of files for specific keywords. This software currently supports: pdf, .docx, and .txt files.
+# PdfResearch
+PdfResearch is free software to extract and search text from multiple files in a folder. This software currently supports .pdf, .docx, and .txt 
+files. It allows for the search of keyword combinations. When done, it ranks the search results according to the highest count and distribution 
+of keywords found.
 
 ## IMPORTANT FEATURES
-
-1. Searches a folder of files for keywords within the aforesaid files. 
+1. Searches a folder of .pdf, .docx, and .txt files for keywords within. 
 2. Supports searches using multiple keywords using pipe key (|)
-3. Built on Python's Re module. 
-4. Display search results based on search counts and bar charts. 
+3. Built on Python's Re module but does not support group search
+4. Display search results based on search counts and Keyword distribution.
 
 ## INSTALLATION
-###### Python installation
+###### Python-based installation
 
 1. From the command line:
     ```
@@ -25,7 +26,7 @@ A program designed to search a folder of files for specific keywords. This softw
      python __main__.py
    ```
 ###### Desktop installation
-1. Download the *.exe* setup from [SourceForge](https://sourceforge.net/projects/)
+1. Download the *.exe* setup from [SourceForge](https://pdfresearch.sourceforge.io)
 2. Install and run.
 
 # Developing
