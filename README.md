@@ -9,6 +9,7 @@ of keywords found.
 3. Built on Python's Re module but does not support group search
 4. Display search results based on search counts and Keyword distribution.
 
+![alt text](https://a.fsdn.com/con/app/proj/pdfresearch/screenshots/MainUiPdfre-0ce3efac.png/max/max/1)
 ## INSTALLATION
 ###### Python-based installation
 
