@@ -9,7 +9,7 @@ from PyQt5 import QtGui as qtg
 from PyQt5 import QtCore as qtc
 from PyQt5 import QtChart as qtch
 
-from .Icons import resources
+from Icons import resources
 import fitz  # from installed PyMuPDF package
 import docx2txt  # to extract text from docx files
 
