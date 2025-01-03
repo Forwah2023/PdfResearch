@@ -1,6 +1,6 @@
 docx2txt==0.8
 fitz==0.0.1.dev2
 PyQt5==5.15.11
-setuptools==69.0.2
+setuptools==70.0.0
 PyMuPDF
 PyQtChart
